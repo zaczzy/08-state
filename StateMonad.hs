@@ -1,7 +1,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TupleSections #-}
 
-module StateMonads where
+module StateMonad where
 
 import Control.Monad (ap, liftM)
 import Data.Map (Map)
