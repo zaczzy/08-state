@@ -125,7 +125,11 @@ label1 :: Tree a -> Tree (a, Int)
 label1 t = fst (aux t 0)
   where
     aux :: Tree a -> Store -> (Tree (a, Int), Store)
-    aux = undefined
+    aux (Leaf x) s = (Leaf (x, s), s + 1)
+    aux (Branch t1 t2) s =
+      let (t1', s1) = aux t1 s
+          (t2', s2) = aux t2 s1
+       in (Branch t1' t2', s2)
 
 {-
 Once you have completed the implementation, again test it on the sample tree
@@ -133,6 +137,7 @@ above.
 -}
 
 -- >>> label1 tree
+-- Branch (Branch (Leaf ('a',0)) (Leaf ('b',1))) (Leaf ('c',2))
 
 {-
 Your result should be:
@@ -198,10 +203,13 @@ where that leads...
 -}
 
 returnST :: a -> ST a
-returnST = undefined
+returnST a = \s -> (a, s)
 
 bindST :: ST a -> (a -> ST b) -> ST b
-bindST = undefined
+bindST transferA f = \s ->
+  let (a, s') = transferA s
+      transferB = f a
+   in transferB s'
 
 {-
 That is, `returnST` converts a value into a store transformer by simply
