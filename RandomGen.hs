@@ -64,10 +64,13 @@ Our random integers depend on the seed that we provide.
 -}
 
 -- >>> testRandom 1
+-- -8728299723972136512
 
 -- >>> testRandom 2
+-- 7133861895013252414
 
 -- >>> testRandom 3
+-- 5757771102651567923
 
 {-
 If we'd like to constrain that integer to a specific inclusive range `(0, n)`
@@ -85,10 +88,13 @@ testBounded :: Int -> Int
 testBounded = fst . nextBounded 20 . mkStdGen
 
 -- >>> testBounded 1
+-- 0
 
 -- >>> testBounded 2
+-- 17
 
 -- >>> testBounded 3
+-- 19
 
 {-
 QuickCheck is defined by a class of types that can construct random
@@ -116,7 +122,7 @@ instance (Arb1 a, Arb1 b) => Arb1 (a, b) where
   arb1 :: StdGen -> ((a, b), StdGen)
   arb1 s =
     let (a :: a, s1) = arb1 s
-        (b :: b, s2) = arb1 s
+        (b :: b, s2) = arb1 s1
      in ((a, b), s2)
 
 {-
@@ -127,16 +133,26 @@ is generated so that you get reasonable lists.
 -}
 
 instance Arb1 a => Arb1 [a] where
-  arb1 s = undefined
+  arb1 s =
+    let (coin :: Bool, s1) = arb1 s
+     in if coin
+          then ([], s1)
+          else
+            let (as :: [a], s2) = arb1 s1
+                (a :: a, s3) = arb1 s2
+             in (a : as, s3)
 
 testArb1 :: Arb1 a => Int -> a
 testArb1 = fst . arb1 . mkStdGen
 
 -- >>> testArb1 1 :: [Int]
+-- [4708425006071971359]
 
 -- >>> testArb1 2 :: [Int]
+-- [9000619708019330313,6913472612286637009]
 
 -- >>> testArb1 3 :: [Int]
+-- []
 
 {-
 Ouch, there's a lot of state passing going on here.
@@ -166,6 +182,8 @@ Now let's define a type for generators, using the state monad.
 
 type Gen a = S.State StdGen a
 
+-- runState:: Gen a -> StdGen -> (Int, StdGen)
+
 {-
 With this type, we can create a type class similar to the one in the
 QuickCheck library.
@@ -191,7 +209,15 @@ What if we want a bounded generator? See if you can define one without using `Ra
 -}
 
 bounded :: Int -> Gen Int
-bounded b = undefined
+bounded b = do
+  s <- S.get
+  let (y :: Int, s') = Random.uniform s
+  S.put s'
+  return (y `mod` b)
+
+bounded' b = do
+  y <- arb -- TODO: what does it mean???
+  return (y `mod` b)
 
 {-
 Now define a `sample` function, which generates and prints 10 random values.
@@ -201,7 +227,8 @@ sample :: Show a => Gen a -> IO ()
 sample gen = do
   seed <- (Random.randomIO :: IO Int) -- get a seed from the global random number generator
   -- hidden in the IO monad
-  undefined
+  let (a, stdgen) = S.runState gen (mkStdGen seed) -- only in do block
+  print a
 
 {-
 For example, you should be able to sample using the `bounded` combinator.

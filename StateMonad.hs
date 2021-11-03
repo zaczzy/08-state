@@ -319,7 +319,7 @@ the next integer as the new state:
 -}
 
 fresh :: ST2 Int
-fresh = undefined
+fresh = S $ \s -> (s, s + 1)
 
 {-
 This function should transform the store as follows: when given an initial
@@ -338,8 +338,13 @@ straightforward to define our tree labeling function.
 -}
 
 mlabel :: Tree a -> ST2 (Tree (a, Int))
-mlabel (Leaf x) = undefined -- use `fresh` here
-mlabel (Branch t1 t2) = undefined
+mlabel (Leaf x) = do
+  y <- fresh
+  return (Leaf (x, y))
+mlabel (Branch t1 t2) = do
+  t1' <- mlabel t1
+  t2' <- mlabel t2
+  return (Branch t1' t2')
 
 {-
 Try to implement `mlabel` both with and without `do`-notation.
@@ -354,7 +359,7 @@ the initial state, and then discarding the final state:
 -}
 
 label :: Tree a -> Tree (a, Int)
-label t = undefined
+label t = fst (runState (mlabel t) 0)
 
 {-
 For example, `label tree` gives the following result:
@@ -461,7 +466,10 @@ We write an *action* that returns the current index (and increments it). Use
 
 freshM :: S.State (MySt a) Int
 freshM = do
-  undefined
+  m <- S.get
+  let i = index m
+  S.put (M (i + 1) (freq m))
+  return i
 
 {-
 Similarly, we want an action that updates the frequency of a given
@@ -469,7 +477,12 @@ element `k`.
 -}
 
 updFreqM :: Ord a => a -> S.State (MySt a) ()
-updFreqM = undefined
+updFreqM k = do
+  m <- S.get
+  let d = freq m
+  let v = Maybe.fromMaybe 0 (Map.lookup k d)
+  S.put (M (index m) (Map.insert k (v + 1) d))
+  return ()
 
 {-
 And with these two, we are done
