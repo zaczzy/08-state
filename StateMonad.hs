@@ -388,7 +388,7 @@ the initial state, and then discarding the final state:
 -}
 
 label :: Tree a -> Tree (a, Int)
-label t = undefined
+label t = fst (runState (mlabel t) 0)
 
 {-
 For example, `label tree` gives the following result:
@@ -505,7 +505,12 @@ element `k`.
 -}
 
 updFreqM :: Ord a => a -> S.State (MySt a) ()
-updFreqM = undefined
+updFreqM k = do
+  m <- S.get
+  let d = freq m
+  let v = Maybe.fromMaybe 0 (Map.lookup k d)
+  S.put (M (index m) (Map.insert k (v + 1) d))
+  return ()
 
 {-
 And with these two, we are done
