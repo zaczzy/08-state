@@ -205,11 +205,21 @@ where that leads...
 returnST :: a -> ST a
 returnST a = \s -> (a, s)
 
-bindST :: ST a -> (a -> ST b) -> ST b
-bindST transferA f = \s ->
-  let (a, s') = transferA s
-      transferB = f a
-   in transferB s'
+-- returnST x = (x,)
+
+-- bindST :: ST a -> (a -> ST b) -> ST b
+-- (Store -> (a, Store)) -> (a -> (Store -> (b, Store))) -> (Store -> (b, Store))
+-- bindST stA f = \s ->
+--   let (a, s') = stA s
+--       stB = f a
+--    in stB s'
+bindST :: forall a b. (Store -> (a, Store)) -> (a -> (Store -> (b, Store))) -> (Store -> (b, Store))
+bindST m k s = (b, s2)
+  where
+    (a, s1) = m s
+    (b, s2) = k a s1
+
+-- bindST m k = uncurry m . k
 
 {-
 That is, `returnST` converts a value into a store transformer by simply
@@ -233,10 +243,23 @@ label2 t = fst (aux t 0)
   where
     aux :: Tree a -> ST (Tree (a, Int))
     aux (Leaf x) = \s -> (Leaf (x, s), s + 1)
-    aux (Branch t1 t2) = \s ->
-      let (t1', s') = aux t1 s
-          (t2', s'') = aux t2 s'
-       in (Branch t1' t2', s'')
+    aux (Branch t1 t2) =
+      bindST (aux t1) $
+        \t1' -> bindST (aux t2) $
+          \t2' -> returnST (Branch t1' t2')
+
+{-
+step 1: think bottom, what returnST looks like:
+  returnST (Branch t1' t2')
+
+step 2: let (t2', s'') = aux t2 s'
+        in return (Branch t1' t2')
+Turns into
+    (bindST (aux t2) $ \t2' -> \s'' -> returnST (Branch t1' t2') s'') s'
+
+step 3: repeat for t1
+
+-}
 
 {-
 Because the `ST` parameterized has definitions for return and bind, we should
@@ -261,6 +284,11 @@ instance Monad ST where
    instance of the class of monadic types, in reality it needs to be redefined
    using the "data" (or `newtype`) mechanism, which requires introducing a
    dummy constructor (called `S` for brevity).
+   TODO: type wants us to create a parameterized type, like "instance Monand ST a",
+   so we CAN'T use type, but newtype.
+   newtype: have a name for type abbrev.
+
+   S creates the newtype, runState pulls out the higher order function.
 
    It is also convenient to define a record selector `runState` that lets us
    access the store transformer in this newtype.
@@ -318,8 +346,9 @@ transformer that simply returns the current state as its result, and
 the next integer as the new state:
 -}
 
+{-the idea is to have a function that increments the stored int and have acecss to it-}
 fresh :: ST2 Int
-fresh = undefined
+fresh = S $ \s -> (s, s + 1)
 
 {-
 This function should transform the store as follows: when given an initial
@@ -338,8 +367,13 @@ straightforward to define our tree labeling function.
 -}
 
 mlabel :: Tree a -> ST2 (Tree (a, Int))
-mlabel (Leaf x) = undefined -- use `fresh` here
-mlabel (Branch t1 t2) = undefined
+mlabel (Leaf x) = do
+  y <- fresh
+  return $ Leaf (x, y) -- use `fresh` here
+mlabel (Branch t1 t2) = do
+  t1' <- mlabel t1
+  t2' <- mlabel t2
+  return (Branch t1' t2')
 
 {-
 Try to implement `mlabel` both with and without `do`-notation.
@@ -398,7 +432,7 @@ First, we write an action that returns the next fresh integer. (Note that the
 first type argument to `S.State` is the store, while the second is the result
 type of the monadic action.)
 -}
-
+{- TODO: what do you mean State is just a monad with specific operations for store and retrieve -}
 freshS :: S.State Int Int
 freshS = do
   i <- S.get
@@ -461,7 +495,9 @@ We write an *action* that returns the current index (and increments it). Use
 
 freshM :: S.State (MySt a) Int
 freshM = do
-  undefined
+  m <- S.get
+  S.put (M (index m + 1) (freq m))
+  return $ index m
 
 {-
 Similarly, we want an action that updates the frequency of a given
